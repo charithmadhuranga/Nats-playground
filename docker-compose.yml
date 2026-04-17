@@ -1,0 +1,41 @@
+services:
+  nats-server:
+    image: nats:latest
+    container_name: nats-server
+    ports:
+      - "4222:4222" # Client port
+      - "8222:8222" # HTTP Monitoring port
+    command: ["-js"] # Enable JetStream for persistence
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: timescaledb
+    environment:
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - timescaledb
+
+  nats-logic:
+    build: 
+      context: ./scripts
+      dockerfile: Dockerfile
+    container_name: nats-logic
+    depends_on:
+      - nats-server
+      - timescaledb
+    environment:
+      - DB_HOST=timescaledb
+      - NATS_URL=nats://nats-server:4222
+    command: python nats_app.py
